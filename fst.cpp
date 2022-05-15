@@ -3,10 +3,17 @@
 
 #include "fst.h"
 
+#define BIT_FINAL_ARC       (1 << 0)
+#define BIT_LAST_ARC        (1 << 1)
+#define BIT_TARGET_NEXT     (1 << 2)
+#define BIT_STOP_NODE       (1 << 3)
+#define BIT_ARC_HAS_OUTPUT  (1 << 4)
+
 struct Arc {
     char label;
     bool isFinal;
     Node *targetNode;
+    int targetIndex;
     int output;
     int nextFinalOutput;
 };
@@ -16,20 +23,70 @@ struct Node {
     std::vector<Arc *> arcs;
 };
 
-Arc* createArc(std::string key, int index, int value) {
+Arc* fst_create_arc(std::string key, int index) {
     Arc *arc = (Arc *)calloc(1, sizeof(Arc));
     arc->label = key[index];
     if (index == key.size() - 1) {
         arc->isFinal = true;
     }
-    arc->output = value;
 
     return arc;
 }
 
-Node* createNode() {
+Node* fst_create_node() {
     Node *n = (Node *)calloc(1, sizeof(Node));
     return n;
+}
+
+void fst_merge_to_current(FST *fst, std::vector <int> &t) {
+    for (int i = t.size() - 1; i >= 0; i--) {
+        int tmp = t[i];
+        if ((tmp & 0xff000000) != 0) {
+            fst->current.push_back((tmp & 0xff000000) >> 24);
+        }
+        if ((tmp & 0x00ff0000) != 0) {
+            fst->current.push_back((tmp & 0x00ff0000) >> 16);
+        }
+        if ((tmp & 0x0000ff00) != 0) {
+            fst->current.push_back((tmp & 0x0000ff00) >> 8);
+        }
+        if ((tmp & 0x000000ff) != 0) {
+            fst->current.push_back((tmp & 0x000000ff));
+        }
+    }
+}
+
+void fst_frozen_node(FST *fst, Node *node) {
+    if (node->numArcs == 0) {
+        fst->lastFrozenNode = -1;
+    } else {
+        std::vector <int> t;
+        for (int i = 0; i < node->numArcs; i++) {
+            int flag = 0, tmp = 0;
+            Arc *arc = node->arcs[i];
+            if (arc->isFinal) {
+                flag |= BIT_FINAL_ARC;
+            }
+            if (i == node->numArcs - 1) {
+                flag |= BIT_LAST_ARC;
+            }
+            if (arc->targetIndex == fst->lastFrozenNode) {
+                flag |= BIT_TARGET_NEXT;
+            }
+            if (arc->targetIndex == -1) {
+                flag |= BIT_STOP_NODE;
+            }
+            if (arc->output != 0) {
+                flag |= BIT_ARC_HAS_OUTPUT;
+                tmp |= ((arc->output & 0xff) << 16);
+            }
+            tmp |= ((int)(arc->label) << 8);
+            tmp |= (flag & 0xff);
+            t.push_back(tmp);
+        }
+        fst_merge_to_current(fst, t);
+        fst->lastFrozenNode = fst->current.size() - 1;
+    }
 }
 
 void fst_add(FST *fst, std::string key, int value) {
@@ -50,27 +107,30 @@ void fst_add(FST *fst, std::string key, int value) {
     preFixLen = i;
 
     // frozen nodes
-    for (i = preFixLen + 1; i < fst->frontier.size(); i++) {
-        Node *node = fst->frontier[i];
-        if (node->numArcs == 0) {
-            fst->lastFrozenNode = -1;
-            fst->frontier.pop_back();
-            break;
-        }
+    for (i = fst->frontier.size() - 1; i > preFixLen; i--) {
+        fst_frozen_node(fst, fst->frontier[i]);
+
+        Node *prevNode = fst->frontier[i - 1];
+        prevNode->arcs[prevNode->numArcs - 1]->targetIndex = fst->lastFrozenNode;
+
+        fst->frontier.pop_back();
     }
 
     if (fst->frontier.size() == 0) {
-        fst->frontier.push_back(createNode());
+        fst->frontier.push_back(fst_create_node());
     }
 
     for (i = preFixLen; i < key.size(); i++) {
-        Arc *arc = createArc(key, i, value - preFixValue);
-        preFixValue = value;
-        arc->targetNode = createNode();
+        Arc *arc = fst_create_arc(key, i);
+        arc->targetNode = fst_create_node();
         fst->frontier.push_back(arc->targetNode);
 
         fst->frontier[i]->numArcs++;
         fst->frontier[i]->arcs.push_back(arc);
+    }
+
+    for (i = 0; i < preFixLen; i++) {
+        Node *node = fst->frontier[i];
     }
 }
 
@@ -83,7 +143,19 @@ void fst_print_frontier(FST *fst) {
        printf("Node: %p, num_arcs: %ld, arcs: \n", fst->frontier[i], fst->frontier[i]->arcs.size());
        for (int j = 0; j < fst->frontier[i]->arcs.size(); j++) {
            Arc *arc = fst->frontier[i]->arcs[j];
-           printf("\tArc, output: %d, label: %c, isFinal: %d, targetNode: %p\n", arc->output, arc->label, arc->isFinal, arc->targetNode);
+           if (j == fst->frontier[i]->arcs.size() - 1) {
+               printf("\tArc, output: %d, label: %c, isFinal: %d, targetNode: %p\n", arc->output, arc->label, arc->isFinal, arc->targetNode);
+           } else {
+               printf("\tArc, output: %d, label: %c, isFinal: %d, targetIndex: %d\n", arc->output, arc->label, arc->isFinal, arc->targetIndex);
+           }
        }
    }
+}
+
+void fst_print_current(FST *fst) {
+    printf("current: ");
+    for (int i = 0; i < fst->current.size(); i++) {
+        printf("%u ", fst->current[i]);
+    }
+    printf("\n");
 }
