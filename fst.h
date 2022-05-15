@@ -14,4 +14,4 @@ struct FST {
 void fst_add(FST *fst, std::string key, int value);
 int fst_get(FST *fst, std::string key);
 
-void fst_print(FST *fst);
+void fst_print_frontier(FST *fst);

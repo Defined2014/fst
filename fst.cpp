@@ -33,16 +33,39 @@ Node* createNode() {
 }
 
 void fst_add(FST *fst, std::string key, int value) {
-    int preFixLen = -1;
-    int remainedValue = value;
+    int i, preFixLen, preFixValue = 0;
+
+    // find prefix len
+    for (i = 0; i < key.size(); i++) {
+        if (i >= fst->frontier.size()) {
+            break;
+        }
+        Node *node = fst->frontier[i];
+        Arc *arc = node->arcs[node->numArcs - 1];
+        if (key[i] != arc->label) {
+            break;
+        }
+        preFixValue += arc->output;
+    }
+    preFixLen = i;
+
+    // frozen nodes
+    for (i = preFixLen + 1; i < fst->frontier.size(); i++) {
+        Node *node = fst->frontier[i];
+        if (node->numArcs == 0) {
+            fst->lastFrozenNode = -1;
+            fst->frontier.pop_back();
+            break;
+        }
+    }
 
     if (fst->frontier.size() == 0) {
         fst->frontier.push_back(createNode());
     }
 
-    for (int i = preFixLen + 1; i < key.size(); i++) {
-        Arc *arc = createArc(key, i, remainedValue);
-        remainedValue = 0;
+    for (i = preFixLen; i < key.size(); i++) {
+        Arc *arc = createArc(key, i, value - preFixValue);
+        preFixValue = value;
         arc->targetNode = createNode();
         fst->frontier.push_back(arc->targetNode);
 
@@ -55,7 +78,7 @@ int fst_get(FST *fst, std::string key) {
     return -1;
 }
 
-void fst_print(FST *fst) {
+void fst_print_frontier(FST *fst) {
    for (int i = 0; i < fst->frontier.size(); i++) {
        printf("Node: %p, num_arcs: %ld, arcs: \n", fst->frontier[i], fst->frontier[i]->arcs.size());
        for (int j = 0; j < fst->frontier[i]->arcs.size(); j++) {
