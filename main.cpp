@@ -14,7 +14,8 @@ int main() {
     fst_add(fst, keys[3], values[3]);
     fst_add(fst, keys[4], values[4]);
     fst_add(fst, keys[5], values[5]);
-    // fst_add(fst, "", 0);
+    fst_finish(fst);
+
     fst_print_frontier(fst);
     fst_print_current(fst);
     return 0;

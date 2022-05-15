@@ -1,5 +1,6 @@
 #include <malloc.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <stack>
 #include <vector>
@@ -65,6 +66,7 @@ int fst_hash_find(FST *fst, Node *node, std::vector <int> t) {
 
 
 void fst_hash_insert(FST *fst, Node *node, std::vector <int> t, int index) {
+    std::string key = fst_cacl_hash(node, t);
     fst->nodeHash[fst_cacl_hash(node, t)] = index;
 }
 
@@ -86,10 +88,10 @@ void fst_merge_to_current(FST *fst, std::vector <int> &t) {
     }
 }
 
-void fst_frozen_node(FST *fst, Node *node, Node *prevNode) {
+int fst_frozen_node(FST *fst, Node *node) {
     if (node->numArcs == 0) {
         fst->lastFrozenNode = -1;
-        prevNode->arcs[prevNode->numArcs - 1]->targetIndex = fst->lastFrozenNode;
+        return fst->lastFrozenNode;
     } else {
         std::vector <int> t;
         for (int i = 0; i < node->numArcs; i++) {
@@ -119,13 +121,12 @@ void fst_frozen_node(FST *fst, Node *node, Node *prevNode) {
         }
         int index = fst_hash_find(fst, node, t);
         if (index != -1) {
-            fst->lastFrozenNode = -2;
-            prevNode->arcs[prevNode->numArcs - 1]->targetIndex = index;
+            return index;
         } else {
             fst_merge_to_current(fst, t);
             fst->lastFrozenNode = fst->current.size() - 1;
             fst_hash_insert(fst, node, t, fst->current.size() - 1);
-            prevNode->arcs[prevNode->numArcs - 1]->targetIndex = fst->lastFrozenNode;
+            return fst->lastFrozenNode;
         }
     }
 }
@@ -153,6 +154,25 @@ void fst_adjust_values(FST *fst, int preFixLen, int value) {
     }
 }
 
+void fst_destory_node(Node *node) {
+    for (int i = 0; i < node->arcs.size(); i++) {
+        free(node->arcs[i]);
+    }
+}
+
+void fst_frozen_nodes(FST *fst, int preFixLen) {
+    // frozen nodes
+    for (int i = fst->frontier.size() - 1; i > preFixLen; i--) {
+        Node *prevNode = fst->frontier[i - 1];
+        int index = fst_frozen_node(fst, fst->frontier[i]);
+        fst_destory_node(fst->frontier[i]);
+        free(fst->frontier[i]);
+        fst->frontier.pop_back();
+
+        prevNode->arcs[prevNode->numArcs - 1]->targetIndex = index;
+    }
+}
+
 void fst_add(FST *fst, std::string key, int value) {
     int i, preFixLen, preFixValue = 0;
 
@@ -170,12 +190,8 @@ void fst_add(FST *fst, std::string key, int value) {
     }
     preFixLen = i;
 
-    // frozen nodes
-    for (i = fst->frontier.size() - 1; i > preFixLen; i--) {
-        fst_frozen_node(fst, fst->frontier[i], fst->frontier[i - 1]);
-        free(fst->frontier[i]);
-        fst->frontier.pop_back();
-    }
+
+    fst_frozen_nodes(fst, preFixLen);
 
     if (fst->frontier.size() == 0) {
         fst->frontier.push_back(fst_create_node());
@@ -193,6 +209,14 @@ void fst_add(FST *fst, std::string key, int value) {
     fst_adjust_values(fst, preFixLen, value);
 }
 
+void fst_finish(FST *fst) {
+    fst_frozen_nodes(fst, 0);
+    fst_frozen_node(fst, fst->frontier[0]);
+    fst_destory_node(fst->frontier[0]); 
+    free(fst->frontier[0]);
+    fst->frontier.pop_back();
+}
+
 int fst_get(FST *fst, std::string key) {
     return -1;
 }
@@ -202,11 +226,7 @@ void fst_print_frontier(FST *fst) {
        printf("Node: %p, num_arcs: %ld, arcs: \n", fst->frontier[i], fst->frontier[i]->arcs.size());
        for (int j = 0; j < fst->frontier[i]->arcs.size(); j++) {
            Arc *arc = fst->frontier[i]->arcs[j];
-           if (j == fst->frontier[i]->arcs.size() - 1) {
-               printf("\tArc, output: %d, label: %c, isFinal: %d, targetNode: %p\n", arc->output, arc->label, arc->isFinal, arc->targetNode);
-           } else {
-               printf("\tArc, output: %d, label: %c, isFinal: %d, targetIndex: %d\n", arc->output, arc->label, arc->isFinal, arc->targetIndex);
-           }
+           printf("\tArc, output: %d, label: %c, isFinal: %d, targetNode: %p, targetIndex: %d\n", arc->output, arc->label, arc->isFinal, arc->targetNode, arc->targetIndex);
        }
    }
 }
