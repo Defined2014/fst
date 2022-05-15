@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <map>
 
 typedef struct Node Node;
 typedef struct Arc Arc;
@@ -9,7 +10,11 @@ struct FST {
     int lastFrozenNode;
     std::vector <char> current;
     std::vector <Node *> frontier;
+
+    std::map <std::string, int> nodeHash;
 };
+
+FST *fst_create();
 
 void fst_add(FST *fst, std::string key, int value);
 int fst_get(FST *fst, std::string key);
