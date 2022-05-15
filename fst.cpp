@@ -89,6 +89,29 @@ void fst_frozen_node(FST *fst, Node *node) {
     }
 }
 
+void fst_adjust_values(FST *fst, int preFixLen, int value) {
+    Node *node = fst->frontier[0];
+    Arc *arc = node->arcs[node->numArcs - 1];
+
+    int remainValue = value - arc->output;
+
+    if (remainValue == 0) {
+        return;
+    } else if (remainValue < 0) {
+        arc->output = value;
+        for (int i = 1; i <= preFixLen; i++) {
+            node = fst->frontier[i];
+            for (int j = 0; j < node->numArcs - 1; j++) {
+                arc = node->arcs[j];
+                arc->output -= remainValue;
+            }
+        }
+    } else {
+        node = fst->frontier[preFixLen];
+        node->arcs[node->numArcs - 1]->output = remainValue;
+    }
+}
+
 void fst_add(FST *fst, std::string key, int value) {
     int i, preFixLen, preFixValue = 0;
 
@@ -129,9 +152,7 @@ void fst_add(FST *fst, std::string key, int value) {
         fst->frontier[i]->arcs.push_back(arc);
     }
 
-    for (i = 0; i < preFixLen; i++) {
-        Node *node = fst->frontier[i];
-    }
+    fst_adjust_values(fst, preFixLen, value);
 }
 
 int fst_get(FST *fst, std::string key) {
